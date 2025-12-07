@@ -1,0 +1,343 @@
+import React, { useState } from 'react';
+import { DollarSign, TrendingUp, Calculator } from 'lucide-react';
+
+export default function DCFCalculator() {
+  const [cashFlows, setCashFlows] = useState(['', '', '', '', '']);
+  const [wacc, setWacc] = useState('');
+  const [terminalValue, setTerminalValue] = useState('');
+  const [sharesOutstanding, setSharesOutstanding] = useState('');
+  const [cashAndEquivalents, setCashAndEquivalents] = useState('');
+  const [totalDebt, setTotalDebt] = useState('');
+  const [results, setResults] = useState(null);
+
+  const handleCashFlowChange = (index, value) => {
+    const newCashFlows = [...cashFlows];
+    newCashFlows[index] = value;
+    setCashFlows(newCashFlows);
+  };
+
+  const addYear = () => {
+    setCashFlows([...cashFlows, '']);
+  };
+
+  const removeYear = () => {
+    if (cashFlows.length > 1) {
+      setCashFlows(cashFlows.slice(0, -1));
+    }
+  };
+
+  const calculateDCF = () => {
+    // Parse inputs
+    const flows = cashFlows.map(cf => parseFloat(cf) || 0).filter(cf => cf !== 0);
+    const discountRate = parseFloat(wacc) / 100;
+    const tv = parseFloat(terminalValue) || 0;
+    const shares = parseFloat(sharesOutstanding) || 0;
+    const cash = parseFloat(cashAndEquivalents) || 0;
+    const debt = parseFloat(totalDebt) || 0;
+
+    if (flows.length === 0 || discountRate <= 0 || shares <= 0) {
+      alert('Please fill in all required fields with valid values');
+      return;
+    }
+
+    // Calculate PV of cash flows
+    let pvCashFlows = 0;
+    const yearlyPVs = [];
+    
+    flows.forEach((cf, index) => {
+      const year = index + 1;
+      const pv = cf / Math.pow(1 + discountRate, year);
+      pvCashFlows += pv;
+      yearlyPVs.push({
+        year,
+        cashFlow: cf,
+        discountFactor: 1 / Math.pow(1 + discountRate, year),
+        presentValue: pv
+      });
+    });
+
+    // Calculate PV of terminal value
+    // Terminal value is discounted from the last forecast year (n)
+    const terminalYear = flows.length;
+    const pvTerminalValue = tv / Math.pow(1 + discountRate, terminalYear);
+
+    // Calculate enterprise value
+    const enterpriseValue = pvCashFlows + pvTerminalValue;
+
+    // Calculate equity value
+    const equityValue = enterpriseValue + cash - debt;
+
+    // Calculate intrinsic share price
+    const intrinsicSharePrice = equityValue / shares;
+
+    setResults({
+      pvCashFlows,
+      pvTerminalValue,
+      enterpriseValue,
+      equityValue,
+      intrinsicSharePrice,
+      yearlyPVs,
+      terminalYear
+    });
+  };
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+  };
+
+  const formatLargeCurrency = (value) => {
+    if (value >= 1e9) {
+      return `$${(value / 1e9).toFixed(2)}B`;
+    } else if (value >= 1e6) {
+      return `$${(value / 1e6).toFixed(2)}M`;
+    }
+    return formatCurrency(value);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
+            <div className="flex items-center gap-3">
+              <Calculator className="w-8 h-8" />
+              <h1 className="text-3xl font-bold">DCF Valuation Calculator</h1>
+            </div>
+            <p className="mt-2 text-blue-100">Discounted Cash Flow Analysis Tool</p>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Cash Flows Section */}
+            <div className="bg-slate-50 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-blue-600" />
+                  Projected Free Cash Flows
+                </h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={addYear}
+                    className="px-3 py-1 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"
+                  >
+                    + Add Year
+                  </button>
+                  <button
+                    onClick={removeYear}
+                    className="px-3 py-1 bg-slate-600 text-white rounded-lg text-sm hover:bg-slate-700 transition"
+                    disabled={cashFlows.length <= 1}
+                  >
+                    - Remove
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {cashFlows.map((cf, index) => (
+                  <div key={index}>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Year {index + 1}
+                    </label>
+                    <input
+                      type="number"
+                      value={cf}
+                      onChange={(e) => handleCashFlowChange(index, e.target.value)}
+                      placeholder="$ Amount"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Other Inputs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  WACC (Discount Rate) %
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={wacc}
+                  onChange={(e) => setWacc(e.target.value)}
+                  placeholder="e.g., 10.5"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Terminal Value ($)
+                </label>
+                <input
+                  type="number"
+                  value={terminalValue}
+                  onChange={(e) => setTerminalValue(e.target.value)}
+                  placeholder="e.g., 500000000"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Shares Outstanding
+                </label>
+                <input
+                  type="number"
+                  value={sharesOutstanding}
+                  onChange={(e) => setSharesOutstanding(e.target.value)}
+                  placeholder="e.g., 10000000"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Cash & Equivalents ($)
+                </label>
+                <input
+                  type="number"
+                  value={cashAndEquivalents}
+                  onChange={(e) => setCashAndEquivalents(e.target.value)}
+                  placeholder="e.g., 50000000"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Total Debt ($)
+                </label>
+                <input
+                  type="number"
+                  value={totalDebt}
+                  onChange={(e) => setTotalDebt(e.target.value)}
+                  placeholder="e.g., 100000000"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Calculate Button */}
+            <button
+              onClick={calculateDCF}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg"
+            >
+              Calculate Valuation
+            </button>
+
+            {/* Results */}
+            {results && (
+              <div className="mt-8 space-y-6">
+                {/* Key Results */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-5 h-5" />
+                      <h3 className="font-semibold">Enterprise Value</h3>
+                    </div>
+                    <p className="text-3xl font-bold">{formatLargeCurrency(results.enterpriseValue)}</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-5 h-5" />
+                      <h3 className="font-semibold">Equity Value</h3>
+                    </div>
+                    <p className="text-3xl font-bold">{formatLargeCurrency(results.equityValue)}</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-6 text-white shadow-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-5 h-5" />
+                      <h3 className="font-semibold">Intrinsic Share Price</h3>
+                    </div>
+                    <p className="text-3xl font-bold">{formatCurrency(results.intrinsicSharePrice)}</p>
+                  </div>
+                </div>
+
+                {/* Detailed Breakdown */}
+                <div className="bg-slate-50 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-4">Valuation Breakdown</h3>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b-2 border-slate-300">
+                          <th className="text-left py-2 px-3 text-slate-700">Year</th>
+                          <th className="text-right py-2 px-3 text-slate-700">Cash Flow</th>
+                          <th className="text-right py-2 px-3 text-slate-700">Discount Factor</th>
+                          <th className="text-right py-2 px-3 text-slate-700">Present Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {results.yearlyPVs.map((row) => (
+                          <tr key={row.year} className="border-b border-slate-200">
+                            <td className="py-2 px-3 font-medium">{row.year}</td>
+                            <td className="py-2 px-3 text-right">{formatLargeCurrency(row.cashFlow)}</td>
+                            <td className="py-2 px-3 text-right">{row.discountFactor.toFixed(4)}</td>
+                            <td className="py-2 px-3 text-right font-semibold">{formatLargeCurrency(row.presentValue)}</td>
+                          </tr>
+                        ))}
+                        <tr className="border-b border-slate-200 bg-blue-50">
+                          <td className="py-2 px-3 font-medium">Terminal (Year {results.terminalYear})</td>
+                          <td className="py-2 px-3 text-right">{formatLargeCurrency(parseFloat(terminalValue))}</td>
+                          <td className="py-2 px-3 text-right">{(1 / Math.pow(1 + parseFloat(wacc)/100, results.terminalYear)).toFixed(4)}</td>
+                          <td className="py-2 px-3 text-right font-semibold">{formatLargeCurrency(results.pvTerminalValue)}</td>
+                        </tr>
+                        <tr className="bg-slate-100 font-bold">
+                          <td className="py-3 px-3" colSpan="3">PV of Cash Flows</td>
+                          <td className="py-3 px-3 text-right">{formatLargeCurrency(results.pvCashFlows)}</td>
+                        </tr>
+                        <tr className="bg-slate-100 font-bold">
+                          <td className="py-3 px-3" colSpan="3">PV of Terminal Value</td>
+                          <td className="py-3 px-3 text-right">{formatLargeCurrency(results.pvTerminalValue)}</td>
+                        </tr>
+                        <tr className="bg-blue-100 font-bold text-lg">
+                          <td className="py-3 px-3" colSpan="3">Enterprise Value</td>
+                          <td className="py-3 px-3 text-right">{formatLargeCurrency(results.enterpriseValue)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-6 space-y-2 text-sm">
+                    <div className="flex justify-between py-2 border-b border-slate-200">
+                      <span className="font-medium">Enterprise Value:</span>
+                      <span>{formatLargeCurrency(results.enterpriseValue)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-slate-200">
+                      <span className="font-medium">+ Cash & Equivalents:</span>
+                      <span className="text-green-600">+{formatLargeCurrency(parseFloat(cashAndEquivalents) || 0)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-slate-200">
+                      <span className="font-medium">- Total Debt:</span>
+                      <span className="text-red-600">-{formatLargeCurrency(parseFloat(totalDebt) || 0)}</span>
+                    </div>
+                    <div className="flex justify-between py-3 font-bold text-lg bg-slate-100 px-2 rounded">
+                      <span>Equity Value:</span>
+                      <span>{formatLargeCurrency(results.equityValue)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-slate-200">
+                      <span className="font-medium">÷ Shares Outstanding:</span>
+                      <span>{parseFloat(sharesOutstanding).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between py-3 font-bold text-xl bg-purple-100 px-2 rounded">
+                      <span>Intrinsic Share Price:</span>
+                      <span className="text-purple-700">{formatCurrency(results.intrinsicSharePrice)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
